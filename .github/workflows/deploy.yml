@@ -28,3 +28,7 @@ jobs:
         port: 55000
         source: "."
         target: "/home/${{ secrets.SERVER_USER }}/interceptionInjection"
+        rm: true
+        strip_components: 0
+        tar_tmp_path: /tmp
+        exclude: "id_rsa"
