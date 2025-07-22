@@ -11,24 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Write SSH private key to file
-      run: |
-        echo "${{ secrets.SERVER_SSH_KEY }}" > id_rsa
-        chmod 600 id_rsa
-
+    - uses: actions/checkout@v4
     - name: Copy files to server using SCP
-      uses: appleboy/scp-action@v0.1.4
+      uses: appleboy/scp-action@v1
       with:
         host: ${{ secrets.SERVER_IP }}
         username: ${{ secrets.SERVER_USER }}
-        key_path: ./id_rsa
+        key: ${{ secrets.SERVER_SSH_KEY }}
         port: 55000
         source: "."
         target: "/home/${{ secrets.SERVER_USER }}/interceptionInjection"
-        exclude: "id_rsa"
-
-    - name: Delete SSH private key
-      run: rm -f id_rsa
