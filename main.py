@@ -1,45 +1,68 @@
 import pandas as pd
 
+import json
 import duckdb
-import argparse
+import threading
 
-database_path = ""
-CHUNK_SIZE = 60 * 60 * 24 * 30
+database_path = "/root/LOCAL/nsid_with_country.duckdb"
+CHUNK_SIZE = 60 * 60 * 24 * 7
+TABLE_NAME = "dns_data"
+
+class NsidEncounter:
+
+    def __init__(self):
+        self.database = {}
+        self.mx = threading.Lock()
+
+
+    def insert(self, nsid, timestamp):
+        with self.mx:
+            if nsid in self.database:
+                if timestamp < self.database[nsid]:
+                    self.database[nsid] = timestamp
+
+            else:
+                self.database[nsid] = timestamp
+
+
+    def record(self, path):
+        with self.mx, open(path, "w") as file:
+            json.dump(self.database, file, indent=4)
+
+
 
 def receive_data_between_timestamps(ts1, ts2, con):
-    pass
+    return con.execute(f"""
+                SELECT *
+                FROM {TABLE_NAME}
+                WHERE timestamp >= {ts1}
+                AND timestamp < {ts2}
+                ORDER BY timestamp
+            """).fetch_df()
 
 
 def process_singular_data(singular_data):
     pass
 
 
-def process_data(data):
-    pass
+def process_data(min_ts, max_ts, con):
+    data = receive_data_between_timestamps(min_ts, max_ts, con)
+
+    print(data.head())
 
 
 if __name__ == "__main__":
-    con = duckdb.connect(database_path)
+    con = duckdb.connect(database_path, read_only=True)
+    first_nsid_encounters = NsidEncounter()
 
-    min_ts, max_ts = con.execute("""
+    min_ts, max_ts = con.execute(F"""
         SELECT MIN(timestamp), MAX(timestamp)
-        FROM measurements
+        FROM {TABLE_NAME}
     """).fetchone()
 
     current_min_timestamp = min_ts
     current_max_timestamp = min_ts + CHUNK_SIZE
 
-    while current_min_timestamp < max_ts:
-        df = con.execute(f"""
-                SELECT *
-                FROM measurements
-                WHERE timestamp >= {current_min_timestamp}
-                  AND timestamp < {current_max_timestamp}
-                ORDER BY timestamp
-            """).fetch_df()
+    process_data(current_min_timestamp, current_max_timestamp, con)
 
-        data = receive_data_between_timestamps(current_min_timestamp, current_max_timestamp)
-        process_data(data)
-
-        current_min_timestamp = min(current_min_timestamp + CHUNK_SIZE, max_ts)
-        current_max_timestamp = current_min_timestamp + CHUNK_SIZE
+    con.close()
