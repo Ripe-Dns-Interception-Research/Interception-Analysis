@@ -1,12 +1,14 @@
 import pandas as pd
 
 import json
+import queue
 import duckdb
 import threading
 
-database_path = "/root/LOCAL/nsid_with_country.duckdb"
+DATABASE_PATH = "/root/LOCAL/nsid_with_country.duckdb"
 CHUNK_SIZE = 60 * 60 * 24 * 7
 TABLE_NAME = "dns_data"
+THREAD_COUNT = 4
 
 class NsidEncounter:
 
@@ -41,28 +43,47 @@ def receive_data_between_timestamps(ts1, ts2, con):
             """).fetch_df()
 
 
-def process_singular_data(singular_data):
-    pass
+def worker(job_queue, tracker):
+    con = duckdb.connect(DATABASE_PATH, read_only=True)
+    while True:
+        try:
+            ts1, ts2 = job_queue.get_nowait()
+        except queue.Empty:
+            break
 
+        df = receive_data_between_timestamps(ts1, ts2, con)
+        for _, row in df.iterrows():
+            tracker.insert(row["domain_name"], row["timestamp"])
+        job_queue.task_done()
+    con.close()
 
-def process_data(min_ts, max_ts, con):
-    data = receive_data_between_timestamps(min_ts, max_ts, con)
-
-    print(data.head())
+def split_time_range(min_ts, max_ts, chunk_size):
+    return [(min_ts + i * chunk_size, min(min_ts + (i + 1) * chunk_size, max_ts)) for i in range(int((max_ts - min_ts) / chunk_size) + 1)]
 
 
 if __name__ == "__main__":
-    con = duckdb.connect(database_path, read_only=True)
+    con = duckdb.connect(DATABASE_PATH, read_only=True)
     first_nsid_encounters = NsidEncounter()
 
     min_ts, max_ts = con.execute(F"""
         SELECT MIN(timestamp), MAX(timestamp)
         FROM {TABLE_NAME}
     """).fetchone()
-
-    current_min_timestamp = min_ts
-    current_max_timestamp = min_ts + CHUNK_SIZE
-
-    process_data(current_min_timestamp, current_max_timestamp, con)
-
     con.close()
+
+    jobs = queue.Queue()
+    for chunk in split_time_range(min_ts, max_ts, CHUNK_SIZE):
+        jobs.put(chunk)
+
+    tracker = NsidEncounter()
+    threads = []
+
+    for _ in range(THREAD_COUNT):
+        t = threading.Thread(target=worker, args=(jobs, tracker))
+        t.start()
+        threads.append(t)
+
+    for t in threads:
+        t.join()
+
+    tracker.record("first_seen.json")
