@@ -1,3 +1,5 @@
+import os.path
+
 import duckdb
 import pandas as pd
 from datetime import datetime, timedelta
@@ -41,6 +43,17 @@ while start_date < end_date:
     """
 
     chunk_df = con.execute(query).df()
+
+    # Drop rows with any missing values
+    chunk_df.dropna(inplace=True)
+
+    # Optional: Drop rows with zero counts (sanity check)
+    chunk_df = chunk_df[chunk_df['total'] > 0]
+
+    # Optional: Drop rows with invalid dates or probe_id (e.g., null or 0)
+    chunk_df = chunk_df[(chunk_df['probe_id'].notnull()) & (chunk_df['probe_id'] != 0)]
+
+    # Append only clean chunk
     results.append(chunk_df)
 
     print(f"Processed chunk: {start_date.date()} → {chunk_end.date()}")
@@ -48,4 +61,4 @@ while start_date < end_date:
 
 # Step 3: Combine and save
 df = pd.concat(results, ignore_index=True)
-df.to_parquet("probe_daily_interception_rates.parquet")
+df.to_parquet(os.path.join("results", "probe_daily_interception_rates.parquet"))
