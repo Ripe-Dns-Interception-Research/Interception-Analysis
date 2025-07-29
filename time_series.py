@@ -2,7 +2,7 @@ import duckdb
 import pandas as pd
 from datetime import datetime, timedelta
 
-con = duckdb.connect("/path/to/your/db.duckdb")
+con = duckdb.connect("/root/PROJECT/database_with_country_codes.db")
 
 TABLE_NAME = "measurements"
 
