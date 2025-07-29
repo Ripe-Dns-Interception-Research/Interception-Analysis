@@ -5,7 +5,7 @@ import os
 import base64
 
 app = dash.Dash(__name__)
-country_list = sorted([f.replace('.png', '') for f in os.listdir("results/changepoints") if f.endswith(".png")])
+country_list = sorted([f.replace('.png', '') for f in os.listdir("/root/interceptionInjection/results/changepoints") if f.endswith(".png")])
 
 app.layout = html.Div([
     dcc.Dropdown(id='country-dropdown', options=[{'label': c, 'value': c} for c in country_list], value=country_list[0]),
@@ -23,4 +23,4 @@ def update_image(country):
     return f"data:image/png;base64,{encoded}"
 
 if __name__ == "__main__":
-    app.run_server(debug=True, host='0.0.0.0')
+    app.run(debug=True, host='0.0.0.0')
